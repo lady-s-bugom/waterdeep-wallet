@@ -11,8 +11,9 @@
   <h1 class="text-3xl font-bold mb-4 text-center">DnD Кошелёк</h1>
 
   <div id="auth" class="mb-4">
-    <input id="nicknameInput" type="text" placeholder="Введите никнейм (латиницей)" class="p-2 border rounded w-full" inputmode="latin" />
-    <button onclick="login()" class="mt-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 w-full">Войти</button>
+    <input id="nicknameInput" type="text" placeholder="Введите никнейм (латиницей)" class="p-2 border rounded w-full mb-2" inputmode="latin" />
+    <select id="nicknameSelect" class="p-2 border rounded w-full mb-2 hidden" onchange="selectNickname(this.value)"></select>
+    <button onclick="login()" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 w-full">Войти</button>
   </div>
 
   <div id="walletSection" class="hidden">
@@ -27,6 +28,7 @@
       <select id="toCurrency" class="p-2 border rounded"></select>
       <button onclick="convertSelected()" class="px-4 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600">🔁 Конвертировать выбранное</button>
       <button onclick="convertMaximized()" class="px-4 py-2 bg-pink-600 text-white rounded hover:bg-pink-700">🔝 Конвертировать в наибольшее</button>
+      <button onclick="clearAll()" class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700">🧹 Очистить все</button>
     </div>
 
     <div class="flex gap-2 flex-wrap">
@@ -226,10 +228,43 @@
     renderCurrencyOptions();
   }
 
-  // Nickname input: enter to login
+  function clearAll() {
+    for (const key of Object.keys(wallet)) {
+      wallet[key] = 0;
+    }
+    saveData();
+    renderWallet();
+    renderCurrencyOptions();
+  }
+
   document.getElementById("nicknameInput").addEventListener("keydown", function(e) {
     if (e.key === "Enter") login();
   });
+
+  listSavedNicknames();
+
+  function listSavedNicknames() {
+    const select = document.getElementById("nicknameSelect");
+    const prefix = "wallet_";
+    const names = Object.keys(localStorage)
+            .filter(key => key.startsWith(prefix))
+            .map(key => key.substring(prefix.length));
+
+    if (names.length > 0) {
+      select.innerHTML = `<option disabled selected>Выберите никнейм</option>`;
+      names.forEach(name => {
+        const option = document.createElement("option");
+        option.value = name;
+        option.textContent = name;
+        select.appendChild(option);
+      });
+      select.classList.remove("hidden");
+    }
+  }
+
+  function selectNickname(name) {
+    document.getElementById("nicknameInput").value = name;
+  }
 </script>
 </body>
 </html>

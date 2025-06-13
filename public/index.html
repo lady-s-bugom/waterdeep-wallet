@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DnD Wallet</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col items-center p-6">
+<div class="w-full max-w-2xl bg-white p-6 rounded-2xl shadow-xl">
+  <h1 class="text-3xl font-bold mb-4 text-center">DnD Кошелёк</h1>
+
+  <div id="auth" class="mb-4">
+    <input id="nicknameInput" type="text" placeholder="Введите никнейм (латиницей)" class="p-2 border rounded w-full" inputmode="latin" />
+    <button onclick="login()" class="mt-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 w-full">Войти</button>
+  </div>
+
+  <div id="walletSection" class="hidden">
+    <h2 class="text-xl font-semibold mb-2">Кошелёк: <span id="nicknameDisplay"></span></h2>
+
+    <div id="wallet" class="grid grid-cols-2 gap-4 mb-4">
+      <!-- Валюта будет отрисована скриптом -->
+    </div>
+
+    <div class="flex gap-2 flex-wrap mb-4">
+      <select id="fromCurrency" class="p-2 border rounded"></select>
+      <select id="toCurrency" class="p-2 border rounded"></select>
+      <button onclick="convertSelected()" class="px-4 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600">🔁 Конвертировать выбранное</button>
+      <button onclick="convertMaximized()" class="px-4 py-2 bg-pink-600 text-white rounded hover:bg-pink-700">🔝 Конвертировать в наибольшее</button>
+    </div>
+
+    <div class="flex gap-2 flex-wrap">
+      <button onclick="saveData()" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">💾 Сохранить</button>
+      <button onclick="downloadData()" class="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600">⬇️ Выгрузить</button>
+      <input type="file" onchange="uploadData(event)" class="hidden" id="uploadInput" />
+      <button onclick="document.getElementById('uploadInput').click()" class="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600">⬆️ Загрузить</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const CURRENCY_RATES = {
+    "Клюв": 1,
+    "Осколок": 10,
+    "Дракон": 100,
+    "Таол": 200,
+    "Солнце": 1000,
+    "Лунная гавань": 5000
+  };
+
+  let wallet = {};
+  let nickname = "";
+
+  function login() {
+    const input = document.getElementById("nicknameInput");
+    const name = input.value.trim();
+    if (!/^[a-zA-Z0-9_]+$/.test(name)) {
+      alert("Никнейм должен быть на английском и без пробелов.");
+      return;
+    }
+    nickname = name;
+    const saved = localStorage.getItem(`wallet_${nickname}`);
+    wallet = saved ? JSON.parse(saved) : Object.fromEntries(Object.keys(CURRENCY_RATES).map(k => [k, 0]));
+    document.getElementById("nicknameDisplay").textContent = nickname;
+    document.getElementById("auth").classList.add("hidden");
+    document.getElementById("walletSection").classList.remove("hidden");
+    renderWallet();
+    renderCurrencyOptions();
+  }
+
+  function renderWallet() {
+    const container = document.getElementById("wallet");
+    container.innerHTML = "";
+    for (const [name, value] of Object.entries(wallet)) {
+      const field = document.createElement("div");
+      field.className = "flex items-center gap-2";
+      const input = document.createElement("input");
+      input.type = "number";
+      input.value = value;
+      input.min = 0;
+      input.className = "w-full p-1 border rounded";
+      input.inputMode = "numeric";
+      input.onfocus = function () {
+        if (input.value === "0") input.value = "";
+      };
+      input.onchange = function () {
+        updateCurrency(name, input.value);
+      };
+      const label = document.createElement("label");
+      label.className = "w-32";
+      label.textContent = name;
+      field.appendChild(label);
+      field.appendChild(input);
+      container.appendChild(field);
+    }
+  }
+
+  function updateCurrency(name, val) {
+    wallet[name] = parseInt(val) || 0;
+    saveData();
+    renderCurrencyOptions();
+  }
+
+  function saveData() {
+    localStorage.setItem(`wallet_${nickname}`, JSON.stringify(wallet));
+  }
+
+  function downloadData() {
+    const blob = new Blob([JSON.stringify(wallet, null, 2)], { type: "application/json" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `${nickname}_wallet.json`;
+    link.click();
+  }
+
+  function uploadData(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        wallet = JSON.parse(e.target.result);
+        saveData();
+        renderWallet();
+        renderCurrencyOptions();
+      } catch (err) {
+        alert("Ошибка загрузки файла");
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  function convertTo(target) {
+    const total = Object.entries(wallet).reduce((sum, [name, count]) => sum + count * CURRENCY_RATES[name], 0);
+    const result = {};
+    let remaining = total;
+
+    for (const [name, rate] of Object.entries(CURRENCY_RATES).sort((a, b) => b[1] - a[1])) {
+      result[name] = Math.floor(remaining / rate);
+      remaining %= rate;
+    }
+
+    wallet = result;
+    saveData();
+    renderWallet();
+    renderCurrencyOptions();
+  }
+
+  function renderCurrencyOptions() {
+    const fromSelect = document.getElementById("fromCurrency");
+    const toSelect = document.getElementById("toCurrency");
+    fromSelect.innerHTML = "";
+    toSelect.innerHTML = "";
+
+    for (const [name, rate] of Object.entries(CURRENCY_RATES)) {
+      const fromOption = document.createElement("option");
+      fromOption.value = name;
+      fromOption.textContent = `${name} (${wallet[name]})`;
+      fromSelect.appendChild(fromOption);
+    }
+
+    const fromValue = fromSelect.value || Object.keys(CURRENCY_RATES)[0];
+    const available = wallet[fromValue] * CURRENCY_RATES[fromValue];
+
+    for (const [name, rate] of Object.entries(CURRENCY_RATES)) {
+      const toOption = document.createElement("option");
+      toOption.value = name;
+      toOption.textContent = name;
+      if (Math.floor(available / rate) === 0 || name === fromValue) {
+        toOption.disabled = true;
+      }
+      toSelect.appendChild(toOption);
+    }
+  }
+
+  function convertSelected() {
+    const from = document.getElementById("fromCurrency").value;
+    const to = document.getElementById("toCurrency").value;
+    if (from === to || wallet[from] === 0) return;
+
+    const totalInBeaks = wallet[from] * CURRENCY_RATES[from];
+    let converted = Math.floor(totalInBeaks / CURRENCY_RATES[to]);
+    let remainder = totalInBeaks % CURRENCY_RATES[to];
+
+    wallet[from] = 0;
+    wallet[to] += converted;
+
+    if (remainder > 0) {
+      for (const [name, rate] of Object.entries(CURRENCY_RATES).sort((a, b) => a[1] - b[1])) {
+        const part = Math.floor(remainder / rate);
+        if (part > 0) {
+          wallet[name] += part;
+          remainder -= part * rate;
+        }
+        if (remainder <= 0) break;
+      }
+    }
+
+    saveData();
+    renderWallet();
+    renderCurrencyOptions();
+  }
+
+  function convertMaximized() {
+    const total = Object.entries(wallet).reduce((sum, [name, count]) => sum + count * CURRENCY_RATES[name], 0);
+
+    const selectedCurrencies = Object.entries(CURRENCY_RATES)
+            .filter(([name]) => wallet[name] > 0)
+            .map(([name]) => name);
+
+    const sorted = Object.entries(CURRENCY_RATES)
+            .filter(([name]) => selectedCurrencies.includes(name))
+            .sort((a, b) => b[1] - a[1]);
+
+    const result = Object.fromEntries(Object.keys(CURRENCY_RATES).map(k => [k, 0]));
+    let remaining = total;
+
+    for (const [name, rate] of sorted) {
+      result[name] = Math.floor(remaining / rate);
+      remaining %= rate;
+    }
+
+    wallet = result;
+    saveData();
+    renderWallet();
+    renderCurrencyOptions();
+  }
+
+  // Nickname input: enter to login
+  document.getElementById("nicknameInput").addEventListener("keydown", function(e) {
+    if (e.key === "Enter") login();
+  });
+</script>
+</body>
+</html>
